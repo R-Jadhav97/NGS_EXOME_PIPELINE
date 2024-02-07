@@ -1,0 +1,168 @@
+# -------------------
+# Data-Garvan_NA12878_HG001_HiSeq_Exome_fastq 
+# -------------------
+https://ftp-trace.ncbi.nlm.nih.gov/ReferenceSamples/giab/data/NA12878/
+https://ftp-trace.ncbi.nlm.nih.gov/ReferenceSamples/giab/release/NA12878_HG001/latest/GRCh38/
+
+# directories
+ref="/data/reference_files/hg38.fa"
+known_sites="/data/reference_files/gatk_resource_bundle/resources_broad_hg38_v0_Homo_sapiens_assembly38.dbsnp138.vcf"
+aligned_reads="/home/rahul/gatk/aligned_reads"
+reads="/home/rahul/gatk/GARVAN_FASTQ"
+results="/home/rahul/gatk/results"
+data="/home/rahul/gatk/data"
+fastqc="/home/rahul/apps/FastQC/fastqc"
+bwa-mem2="/data/src/bwa-mem2-2.2.1_x64-linux/bwa-mem2"
+
+
+
+
+
+# -------------------
+# STEP 1: QC - Run fastqc 
+# -------------------
+
+#echo "STEP 1: QC - Run fastqc"(lane _files)
+
+/home/rahul/apps/FastQC/fastqc ${reads}/NIST7035_TAAGGCGA_L001_R1_001.fastq.gz -o ${fastqc_NA12878}/
+/home/rahul/apps/FastQC/fastqc ${reads}/NIST7035_TAAGGCGA_L002_R1_001.fastq.gz -o ${fastqc_NA12878}/
+/home/rahul/apps/FastQC/fastqc ${reads}/NIST7035_TAAGGCGA_L002_R1_001.fastq.gz -o ${fastqc_NA12878}/
+/home/rahul/apps/FastQC/fastqc ${reads}/NIST7035_TAAGGCGA_L002_R2_001.fastq.gz -o ${fastqc_NA12878}/
+/home/rahul/apps/FastQC/fastqc ${reads}/NIST7086_CGTACTAG_L001_R1_001.fastq.gz -o ${fastqc_NA12878}/
+/home/rahul/apps/FastQC/fastqc ${reads}/NIST7086_CGTACTAG_L001_R2_001.fastq.gz -o ${fastqc_NA12878}/
+/home/rahul/apps/FastQC/fastqc ${reads}/NIST7086_CGTACTAG_L002_R1_001.fastq.gz -o ${fastqc_NA12878}/
+/home/rahul/apps/FastQC/fastqc ${reads}/NIST7086_CGTACTAG_L002_R2_001.fastq.gz -o ${fastqc_NA12878}/
+
+
+#Adapter trimmimg required.
+
+
+#Merge NA12878 (8 files) into NA12878_R2.fastq.gz NA12878_R1.fastq.gz
+
+cat NIST7035_TAAGGCGA_L001_R1_001.fastq.gz  NIST7035_TAAGGCGA_L002_R1_001.fastq.gz NIST7086_CGTACTAG_L001_R1_001.fastq.gz NIST7086_CGTACTAG_L002_R1_001.fastq.gz >/home/rahul/gatk/GARVAN_FASTQ/NA12878_R1.fastq.gz
+
+cat NIST7035_TAAGGCGA_L001_R1_001.fastq.gz  NIST7035_TAAGGCGA_L002_R1_001.fastq.gz NIST7086_CGTACTAG_L001_R1_001.fastq.gz NIST7086_CGTACTAG_L002_R1_001.fastq.gz >/home/rahul/gatk/GARVAN_FASTQ/NA12878_R1.fastq.gz
+
+#Adapter trimmimg required.
+
+# -------------------
+# STEP 2: Trimmomatic 
+# -------------------
+
+ java -jar trimmomatic-0.39.jar PE -phred33 NA12878_R1.fastq.gz NA12878_R2.fastq.gz NA12878_R1_paired.fastq.gz NA12878_R1_unpaired.fastq.gz NA12878_R2_Paired.fastq.gz NA12878_R2_unpaired.fastq.gz ILLUMINACLIP:adapter.fasta:2:30:10
+
+#Check adapters manually using command line:
+zcat NA12878_R1_paired.fastq.gz | grep --color CTGTCTCTTATACACATCTCCGAGCCCACGAGAC
+zcat NA12878_R2_Paired.fastq.gz | grep --color CTGTCTCTTATACACATCTGACGCTGCCGACGA
+
+# -------------------
+# STEP 3: QC - Run fastqc(trimed_files)
+# -------------------
+
+/home/rahul/apps/FastQC/fastqc ${reads}/NA12878_R1_paired.fastq.gz -o ${reads}/
+/home/rahul/apps/FastQC/fastqc ${reads}/NA12878_R2_Paired.fastq.gz -o ${reads}/
+
+#Adapters are removed succesfully.
+# -----------------------------------------
+# STEP 4: Alignment-BWA-MEM
+# -----------------------------------------
+
+#BWA index reference 
+
+bwa index ${ref}
+
+/home/rahul/apps/bwa-mem2-2.2.1_x64-linux/bwa-mem2 mem -t 20 -R "@RG\tID:NA12878\tPL:ILLUMINA\tSM:NA12878" /home/rahul/Reference/hg38.fa /home/rahul/gatk/GARVAN_FASTQ/NA12878_R1_paired.fastq.gz /home/rahul/gatk/GARVAN_FASTQ/NA12878_R2_Paired.fastq.gz > /home/rahul/gatk/aligned_reads/NA12878_aligned.sam 
+
+#flagstat- To check statistics of sam/bam file
+
+/data/src/samtools-1.18/samtools flagstat NA12878_aligned.sam
+
+
+# Convert SAM to BAM
+
+samtools view -S -b aligned.sam > aligned.bam
+
+
+# Sort and index the BAM file
+samtools sort aligned.bam -o sorted.bam
+samtools index sorted.bam
+
+
+# -----------------------------------------
+# STEP 5: Mark Duplicates and Sort - GATK4
+# -----------------------------------------
+
+/data/src/gatk/gatk MarkDuplicatesSpark -I /home/rahul/gatk/aligned_reads/NA12878_aligned.sam -O /home/rahul/gatk/aligned_reads/NA12878_sorted_dedup.bam
+
+
+# ----------------------------------
+# STEP 4: Base quality recalibration
+# ----------------------------------
+
+# 1. build the model
+
+/data/src/gatk/gatk BaseRecalibrator -I /home/rahul/gatk/aligned_reads/NA12878_sorted_dedup.bam -R /home/rahul/Reference/hg38.fa --known-sites /data/reference_files/gatk_resource_bundle/resources_broad_hg38_v0_Homo_sapiens_assembly38.dbsnp138.vcf -O /home/rahul/gatk/aligned_reads/recal_data.table
+
+
+# 2. Apply the model to adjust the base quality scores
+
+ /data/src/gatk/gatk ApplyBQSR -I /home/rahul/gatk/aligned_reads/NA12878_sorted_dedup.bam -R /home/rahul/Reference/hg38.fa --bqsr-recal-file /home/rahul/gatk/aligned_reads/recal_data.table -O /home/rahul/gatk/aligned_reads/NA12878_sorted_dedup_bqsr_reads.bam
+
+
+
+# -----------------------------------------------
+# STEP 5: Collect Alignment & Insert Size Metrics
+# -----------------------------------------------
+
+
+echo "STEP 5: Collect Alignment & Insert Size Metrics"
+
+/data/src/gatk/gatk CollectAlignmentSummaryMetrics -R /home/rahul/Reference/hg38.fa -I /home/rahul/gatk/aligned_reads/NA12878_sorted_dedup_bqsr_reads.bam -O /home/rahul/gatk/aligned_reads/alignment_metrics.txt
+
+/data/src/gatk/gatk CollectInsertSizeMetrics -I /home/rahul/gatk/aligned_reads/NA12878_sorted_dedup_bqsr_reads.bam -O /home/rahul/gatk/aligned_reads/insert_size_metrics.tct -H  /home/rahul/gatk/aligned_reads/insert_size_histogram.pdf
+
+
+# ----------------------------------------------
+# STEP 6: Call Variants - gatk haplotype caller
+# ----------------------------------------------
+
+echo "STEP 6: Call Variants - gatk haplotype caller using bed file"
+
+convert bed file grch37 to grch38--- $ wget https://hgdownload.cse.ucsc.edu/admin/exe/linux.x86_64/liftOver
+chmod +x ./home/rahul/gatk/GARVAN_FASTQ/liftOver
+
+wget https://hgdownload.cse.ucsc.edu/goldenpath/hg19/liftOver/hg19ToHg38.over.chain.gz
+
+/home/rahul/gatk/GARVAN_FASTQ/liftOver nexterarapidcapture_expandedexome_targetedregions.bed.gz hg19ToHg38.over.chain output.bed unlifted.bed
+
+/data/src/gatk/gatk HaplotypeCaller -R /home/rahul/Reference/hg38.fa -I /home/rahul/gatk/aligned_reads/NA12878_sorted_dedup_bqsr_reads.bam -O /home/rahul/gatk/raw_variants.vcf -L /home/rahul/gatk/GARVAN_FASTQ/nexterarapidcapture_output.bed
+
+
+#Variant Filtration :
+ /data/src/gatk/gatk VariantFiltration -R /home/rahul/Reference/hg38.fa -V /home/rahul/gatk/raw_variants.vcf --filter-expression "QD < 2.0 || FS > 60.0 || MQ < 40.0" --filter-name "basic_filter" -O /home/rahul/gatk/results/filtered_variants.vcf
+
+
+# ----------------------------------------------
+# Variant_annotation-Annovar
+# ----------------------------------------------
+
+#convert VCF To annovar supported format
+
+perl convert2annovar.pl -format vcf4  /home/rahul/gatk/results/filtered_variants.vcf > NA12878_VCF.avinput
+
+#Download database reference database of Hg38 from annovar
+
+perl annotate_variation.pl -buildver hg38 -downdb -webfrom annovar refGene humandb/
+perl annotate_variation.pl -buildver hg38 -downdb cytoBand humandb/
+perl annotate_variation.pl -buildver hg38 -downdb -webfrom annovar exac03 humandb/
+perl annotate_variation.pl -buildver hg38 -downdb -webfrom annovar avsnp147 humandb/
+perl annotate_variation.pl -buildver hg38 -downdb -webfrom annovar dbnsfp30a humandb/
+
+perl table_annovar.pl /home/rahul/gatk/results/NA12878_VCF.avinput /home/rahul/apps/ANNOVAR/humandb -outfile NA12878_annotation -buildver hg38 -protocol refGene,avsnp147 -operation g,f
+
+#convert to CSV
+
+sed 's/\t/,/g' NA12878_annotation.hg38_multianno.txt > NA12878_annotation.hg38_multianno.csv
+
+
+
