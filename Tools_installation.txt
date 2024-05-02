@@ -2,3 +2,25 @@
 
 wget https://www.bioinformatics.babraham.ac.uk/projects/fastqc/fastqc_v0.12.1.zip 
 
+Download free xftp version:
+
+https://www.netsarang.com/en/free-for-home-school/
+
+1.connect to XFTP
+
+Host:10.71.20.231
+Port:22
+username:rahul
+Password:MGB12#$5
+
+#Connet SSH server to ubantu terminal
+ssh rahul@10.71.20.231
+Password- MGB12#$5
+
+2. bash
+
+3. /data/src/gatk/gatk --help
+
+4. To set bash as your default shell:
+chsh -s /bin/bash
+
